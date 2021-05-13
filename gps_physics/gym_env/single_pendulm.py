@@ -70,9 +70,9 @@ class SinglePendulmEnv(gym.Env):
         return self._get_obs(), -costs, False, {}
 
     def reset(self):
-        # high = np.array([np.pi, 1])
-        # self.state = self.np_random.uniform(low=-high, high=high)
-        self.state = np.array([np.pi, 0.0])
+        high = np.array([np.pi, 1])
+        self.state = self.np_random.uniform(low=-high, high=high)
+        # self.state = np.array([np.pi, 0.0])
         self.last_u = None
         return self._get_obs()
 
@@ -118,12 +118,27 @@ class SinglePendulmEnv(gym.Env):
 
 
 if __name__=="__main__":
-    m, l, dt = 1.0, 0.25, 0.01
+    m, l, dt = 1.0, 0.25, 0.005
 
     env = SinglePendulmEnv(m, l, dt)
-    env.reset()
+    obs = env.reset()
+    work_act = 0
     for i in range(1000):
-        obs, reward, done, info = env.step(0.02)
-        print(obs)
+        action = 1.0
+        next_obs, reward, done, info = env.step(action)
+        
+        # total_energy = 0.5 * m * (l*obs[1])**2 + m * 9.8 * l * np.cos(obs[0])
+        lagrangian = 0.5 * m * (l*obs[1])**2 - m * 9.8 * l * np.cos(obs[0])
+        next_lagrangian = 0.5 * m * (l*next_obs[1])**2 - m * 9.8 * l * np.cos(next_obs[0])
+
+        print(next_lagrangian - lagrangian)
+        print(action * (next_obs[0] - obs[0]))
+
+        obs = next_obs
+        
+        
+        
+
+        # print(obs)
         print()
         env.render()
