@@ -1,19 +1,17 @@
 import jax
-from jax import random
-from jax.random import PRNGKey
 import jax.numpy as jnp
-from jax import jit, grad, jacfwd, jacrev, vmap
 import numpy as np
-
+from jax import grad, jacfwd, jacrev, jit, random, vmap
+from jax.experimental import optimizers, stax
 from jax.experimental.ode import odeint
-from jax.experimental import optimizers
-from jax.experimental import stax
+from jax.random import PRNGKey
 
 
 def normalize_coord(state):
     q, qdot = jnp.split(state, 2)
     q_normalized = (q + np.pi) % (2 * np.pi) - np.pi
     return jnp.concatenate([q_normalized, qdot])
+
 
 def jax_hessian(f):
     # we are using double jacfwd.
@@ -23,12 +21,14 @@ def jax_hessian(f):
     # so jacfwd(jacfwd(x)) is faster than jacfwd(jacrev)
     return jit(jacfwd(jacfwd(f)))
 
+
 # def jax_hessian_diag(f, input):
 #     H = jax_hessian(f)(input)
 #     diag = H.diagonal(0, 1, 2)
 #     return diag
 
 # vjax_hessian_diag = vmap(jax_hessian_diag, in_axes=(None, 0))
+
 
 def lagrangian_forward_dynamics(L, state, action):
     D = state.shape[0] // 2
@@ -45,9 +45,6 @@ def lagrangian_forward_dynamics(L, state, action):
 
     # q_ddot = L_H_q_dot_inv @ (L_q - L_q_q_dot @ qdot + action)
     return None
-
-
-
 
 
 # init_random_params, mlp = stax.serial(
@@ -69,7 +66,7 @@ action = jax.random.normal(rng, (2,))
 device_
 
 
-L = lambda x : x.T @ x
+L = lambda x: x.T @ x
 print(state, L)
 
 import time
@@ -79,5 +76,6 @@ lagrangian_forward_dynamics(L, state, action)
 print(time.time() - s)
 
 s = time.time()
-for i in range(10): lagrangian_forward_dynamics(L, state, action)
+for i in range(10):
+    lagrangian_forward_dynamics(L, state, action)
 print(time.time() - s)
