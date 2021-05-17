@@ -14,7 +14,7 @@ def angle_normalize(x):
 def eom(x, t, m, g, l, u):
     q, q_dot = x
     q = angle_normalize(q)
-    return np.array([q_dot, (u - 0.01 * q_dot) / (m * (l ** 2)) + g / l * np.sin(q)])
+    return np.array([q_dot, (float(u) - 0.01 * q_dot) / (m * (l ** 2)) + g / l * np.sin(q)])
 
 
 class SinglePendulmEnv(gym.Env):
@@ -72,6 +72,7 @@ class SinglePendulmEnv(gym.Env):
 
     def render(self, mode="human"):
         if self.viewer is None:
+
             from gym.envs.classic_control import rendering
 
             self.viewer = rendering.Viewer(500, 500)
@@ -94,15 +95,16 @@ class SinglePendulmEnv(gym.Env):
             self.viewer.add_geom(axle)
 
             fname = path.join(path.dirname(__file__), "assets/clockwise.png")
-            self.img = rendering.Image(fname, 1.0, 1.0)
-            self.imgtrans = rendering.Transform()
-            self.img.add_attr(self.imgtrans)
-
-        self.viewer.add_onetime(self.img)
+            print(fname)
+            # self.img = rendering.Image(fname, 1.0, 1.0)
+            # self.imgtrans = rendering.Transform()
+            # self.img.add_attr(self.imgtrans)
+            
+        # self.viewer.add_onetime(self.img)
         self.pole_transform.set_rotation(self.state[0] + np.pi / 2)
         self.mass_transform.set_translation(np.cos(self.state[0] + np.pi / 2), np.sin(self.state[0] + np.pi / 2))
 
-        self.imgtrans.scale = (-self.last_u / 2, np.abs(self.last_u) / 2)
+        # self.imgtrans.scale = (-self.last_u / 2, np.abs(self.last_u) / 2)
 
         return self.viewer.render(return_rgb_array=mode == "rgb_array")
 

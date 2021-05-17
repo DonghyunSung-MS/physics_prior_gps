@@ -12,7 +12,7 @@ from gps_physics.algorithms.dynamics.dynamics import Dynamics
 from gps_physics.model.lagdyn import ControlledLNN, NonConsLNN
 from gps_physics.utils.dyn_train import LNNLearner
 from gps_physics.utils.ptu import *
-from gps_physics.utils.samples import Trajectory
+from gps_physics.utils.samples import TrajectoryBuffer
 
 
 class LNNprior:
@@ -75,19 +75,23 @@ class DynamicsLRLNN(Dynamics):
         self.u_dim = u_dim
         self.dt = dt
 
-    def updata_prior(self, x_xu: List[np.array]):
+    def updata_prior(self, x_xu: List[TrajectoryBuffer]):
         """Construct Data Loader for physic prior
 
         x' x u to dx = (x' - x)/dt, du = 0
 
         Args:
-            xux (List[Trajectory]):
+            xux (List[TrajectoryBuffer]):
             list index -> global iteration, each iteration contains trajectory data[M, N, T, x'xu]
 
 
         """
         # print(x_xu.shape)
-        x_xu = np.stack(x_xu).reshape(-1, self.x_dim * 2 + self.u_dim)
+        data = []
+        for ele in x_xu:
+            data.append(ele.traj)
+
+        x_xu = np.stack(data).reshape(-1, self.x_dim * 2 + self.u_dim)
 
         MNT = x_xu.shape[0]
         nq = self.x_dim // 2
@@ -110,41 +114,37 @@ class DynamicsLRLNN(Dynamics):
     def fit(self, mean_traj: np.array):
         """Linearized dynamics along mean trajectory
 
+        perturbed equation delta dynamics
+
         Args:
-            mean_traj (np.array): T * x u
+            mean_traj (np.array): T * x' x u
         """
         T = mean_traj.shape[0]
 
-        self.AB_t = np.zeros((T, self.x_dim, self.x_dim + self.u_dim))
-        self.c_t = np.zeros((T, self.x_dim))
-        self.W_t = np.zeros((T, self.x_dim, self.x_dim))
+        self.AB = np.zeros((T, self.x_dim, self.x_dim + self.u_dim))
+        self.c = np.zeros((T, self.x_dim))
+        self.W = np.zeros((T, self.x_dim, self.x_dim))
 
         q = self.x_dim // 2
 
         for t in range(T):
-            xu = torch.FloatTensor(mean_traj[t]).reshape(1, -1)
+            xu = torch.FloatTensor(mean_traj[t][self.x_dim:]).reshape(1, -1)
 
-            D_qqd_qdd = jacobian(self.model.defunc.m.forward, xu).squeeze()[q : 2 * q].detach().numpy()
-            f_star = self.model.defunc(0, xu).squeeze()[q : 2 * q].detach().numpy()
+            D_qqd_qdd = jacobian(self.prior.model.defunc.m.forward, xu).squeeze()[q : 2 * q].detach().numpy()
+            f_star = self.prior.model.defunc(0, xu).squeeze()[q : 2 * q].detach().numpy()
 
-            res = f_star - D_qqd_qdd @ mean_traj[t]
+            ident = np.block([
+                              [np.eye(q), np.eye(q) * self.dt, np.zeros((q, self.u_dim))], 
+                              [np.zeros((q, q)), np.eye(q), np.zeros((q, self.u_dim))]
+                              ])
+            AB_t = np.block([[D_qqd_qdd * self.dt**2],[D_qqd_qdd * self.dt]]) + ident
 
-            ident = np.block([[np.eye(q), np.eye(q) * self.dt], [np.zeros(self.x_dim, self.x_dim), np.eye(q)]])
 
-            A_con = D_qqd_qdd[:, : 2 * q]
-            B_con = D_qqd_qdd[:, 2 * q :]
+            c_t = np.hstack([f_star * self.dt ** 2, f_star * self.dt]) - mean_traj[t][:self.x_dim] + mean_traj[t][self.x_dim:2*self.x_dim]
+            c_t[:self.x_dim] += mean_traj[t][self.x_dim + q:self.x_dim + 2*q] * self.dt
 
-            A_disc = np.block(
-                [[A_con * self.dt ** 2, np.zeros(self.x_dim, self.x_dim)], [np.zeros(self.x_dim, self.x_dim), A_con * self.dt]]
-            )
+            self.AB[t] = AB_t
+            self.c[t] = c_t
+            self.W[t] = 0.1 * np.eye(self.x_dim)  # TODO better noise reprenstation
 
-            A_disc = A_disc + ident
-            B_disc = np.block([[B_con * self.dt ** 2], [B_con * self.dt]])
-
-            c_disc = np.block([[res * self.dt ** 2], [res * self.dt]])
-
-            self.AB_t[t] = np.hstack([A_disc, B_disc])
-            self.c_t[t] = c_disc
-            self.W_t[t] = 0.1 * np.eye(self.x_dim)  # TODO better noise reprenstation
-
-        return self.AB_t, self.c_t, self.W_t
+        return self.AB, self.c, self.W
