@@ -1,5 +1,7 @@
 import abc
+
 import numpy as np
+
 
 class Policy(object):
     "Policy Module Superclass"
@@ -25,4 +27,3 @@ class Policy(object):
     @abc.abstractclassmethod
     def fit(self, *args, **kwargs):
         raise NotImplementedError("fit method is not implemented yet!")
-

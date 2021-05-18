@@ -8,11 +8,13 @@ import torch
 import torchdyn
 
 import gps_physics
-from gps_physics.algorithms.cost.cost import SinglePendulmCost
+from gps_physics.algorithms.cost.cost import SinglePendulmAugCost, SinglePendulmCost
 from gps_physics.algorithms.dynamics.lnn_dynamics import DynamicsLRLNN
 from gps_physics.algorithms.policy.lg_policy import LGPolicy
+from gps_physics.algorithms.policy.NN_policy import NNPolicy
 from gps_physics.gym_env.single_pendulm import SinglePendulmEnv
 from gps_physics.utils.samples import TrajectoryBuffer
+from gps_physics.utils.traj_utils import *
 
 matplotlib.use("TkAgg")
 
@@ -26,10 +28,16 @@ torch.manual_seed(config["seed"])
 
 if __name__ == "__main__":
 
-    MAX_ITER = config["gps"]["max_iter"]
-    M = config["gps"]["M"]  # num initial
-    N = config["gps"]["N"]  # num traj per initial condition
-    T = config["gps"]["T"]  # horizon
+    MAX_ITER = config["gps_algo"]["max_iter"]
+    M = config["gps_algo"]["M"]  # num initial
+    N = config["gps_algo"]["N"]  # num traj per initial condition
+    T = config["gps_algo"]["T"]  # horizon
+
+    # lag_multiplier
+    eta_min = config["gps_algo"]["eta_min"]
+    eta_max = config["gps_algo"]["eta_max"]
+
+    lg_step = config["gps_algo"]["lg_step"]
 
     mass, length, dt = 1.0, 0.25, 0.01
     env = SinglePendulmEnv(mass, length, dt)
@@ -40,16 +48,17 @@ if __name__ == "__main__":
     dynamics_lr = DynamicsLRLNN(x_dim, u_dim, dt, config)
 
     lg_policy_list = []
+    gl_policy = NNPolicy(x_dim, u_dim, hyperparams=config["global_policy"])
 
     # set initial policy
     for m in range(M):
         lg = LGPolicy(x_dim, u_dim, dt, config)
-        lg.K = np.zeros((T, u_dim, x_dim))
-        lg.k = np.random.randn(T, u_dim) * 1.5
+        lg.K = np.random.randn(T, u_dim, x_dim)
+        lg.k = np.random.randn(T, u_dim)
         lg.cov = np.stack([np.eye(u_dim) for _ in range(T)])
         lg_policy_list.append(lg)
 
-    sing_pen_cost = SinglePendulmCost(1.0, 0.1, 0.001)
+    sing_pen_augcost = SinglePendulmAugCost(1.0, 0.1, 0.001)
 
     env.reset()
 
@@ -71,7 +80,8 @@ if __name__ == "__main__":
                 env.state = reset_states[m]
                 obs = env._get_obs()  # x0
                 for t in range(T):
-                    action = lg_policy_list[m].get_action(t, obs, mean_traj[m][t][x_dim : x_dim * 2], mean_traj[m][t][-u_dim:])
+                    # action = lg_policy_list[m].get_action(t, obs, mean_traj[m][t][x_dim : x_dim * 2], mean_traj[m][t][-u_dim:])
+                    action = gl_policy.get_action(obs)
                     next_obs, reward, done, _ = env.step(action[0])
                     iter_traj.push_transition(m, n, t, obs, action, next_obs)
                     if n == 0:
@@ -83,47 +93,42 @@ if __name__ == "__main__":
         exp_buffer.append(iter_traj)
         dynamics_lr.updata_prior(exp_buffer)
 
+        if i == 0:
+            lg_K = []
+            lg_k = []
+            lg_cov = []
+            for m in range(M):
+                lg_K.append(lg_policy_list[m].K)
+                lg_k.append(lg_policy_list[m].k)
+                lg_cov.append(lg_policy_list[m].cov)
+
+            gl_policy.fit(np.stack(lg_K), np.stack(lg_k), np.stack(lg_cov), iter_traj)
+
+        lg_K = []
+        lg_k = []
+        lg_cov = []
+
         for m in range(M):
+            epsilon = 0.1
+            eta = 1.0
             dynamics_lr.fit(mean_traj[m])
-            mean_traj_at_m, joint_cov_at_m, l = lg_policy_list[m].fit(
-                reset_states[m], dynamics_lr, mean_traj[m], sing_pen_cost
-            )
+            mean_traj_at_m = None
+            joint_cov_at_m = None
+            # gps iteration
+            for _ in range(lg_step):
+                mean_traj_at_m, joint_cov_at_m, l = lg_policy_list[m].fit(
+                    reset_states[m], dynamics_lr, mean_traj[m], sing_pen_augcost, gl_policy=gl_policy, eta=eta
+                )
+                kl_traj = kl_trajectory(mean_traj_at_m, lg_policy_list[m], gl_policy)
+                eta = eta_adjust(kl_traj, eta, eta_min, eta_max, epsilon)
+                print(f"{i}th iter eta: {eta}, kl_traj {kl_traj}")
+
             print(f"{m}th init cost: {l}")
             iter_traj.mean_traj[m] = mean_traj_at_m
             iter_traj.joint_cov[m] = joint_cov_at_m
 
-        print("it's done")
-        # compare dynamics
-        # u = np.random.randn()*1.5
-        # x = reset_states[2]
-        # time = (0.0, 1.0)
-        # space = torch.linspace(*time, 1000)
-        # pt_xu = torch.FloatTensor(np.hstack([x, u]).reshape(1, -1))
+            lg_K.append(lg_policy_list[m].K)
+            lg_k.append(lg_policy_list[m].k)
+            lg_cov.append(lg_policy_list[m].cov)
 
-        # def angle_normalize(x):
-        #     return ((x + np.pi) % (2 * np.pi)) - np.pi
-
-        # def eom(t, xu):
-        #     q, q_dot, u = torch.split(xu, 1, 1)
-        #     q = angle_normalize(q)
-        #     b = 0.0
-        #     q_ddot = (u - b * q_dot) / (mass * length ** 2) + 9.8 / length * torch.sin(q)
-        #     return torch.cat([q_dot, q_ddot, torch.zeros_like(u)], dim=1)
-
-        # gt_traj = torchdyn.odeint(eom, pt_xu, space, method="rk4").squeeze().detach()
-        # print("torchdyn done")
-
-        # traj = (
-        #     dynamics_lr.prior.model.trajectory(pt_xu, space)
-        #     .squeeze()
-        #     .detach()
-        # )
-        # print("torchdyn done")
-        # print(gt_traj.shape)
-        # plt.plot(space, gt_traj[:, 0])
-        # plt.plot(space, gt_traj[:, 1])
-        # plt.plot(space, traj[:, 0], "--")
-        # plt.plot(space, traj[:, 1], "--")
-        # plt.legend(["gt_pos", "gt_vel"] + ["pr_pos", "pr_vel"])
-        # # plt.legend()
-        # plt.show()
+        gl_policy.fit(np.stack(lg_K), np.stack(lg_k), np.stack(lg_cov), iter_traj)

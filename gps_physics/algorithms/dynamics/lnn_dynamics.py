@@ -9,7 +9,7 @@ from torch.autograd.functional import jacobian
 from torchdyn.models import NeuralDE
 
 from gps_physics.algorithms.dynamics.dynamics import Dynamics
-from gps_physics.model.lagdyn import ControlledLNN, NonConsLNN
+from gps_physics.model.lagdyn import ControlledLNN, DeepLagrangianNetwork, NonConsLNN
 from gps_physics.utils.dyn_train import LNNLearner
 from gps_physics.utils.ptu import *
 from gps_physics.utils.samples import TrajectoryBuffer
@@ -21,26 +21,26 @@ class LNNprior:
         self.dt = dt
         self.x_dim = x_dim
         self.u_dim = u_dim
-        L = torch.nn.Sequential(
-            *[
-                CosSin(x_dim, angular_dims=hyperparams["angular_dims"]),
-                nn.Linear(x_dim + len(hyperparams["angular_dims"]), hyperparams["hidden_size"]),
-                nn.Softplus(),
-                nn.Linear(hyperparams["hidden_size"], hyperparams["hidden_size"]),
-                nn.Softplus(),
-                nn.Linear(hyperparams["hidden_size"], 1),
-            ]
-        )
-        Q = torch.nn.Sequential(
-            *[
-                CosSin(x_dim, angular_dims=hyperparams["angular_dims"]),
-                nn.Linear(x_dim + len(hyperparams["angular_dims"]), hyperparams["hidden_size"]),
-                nn.Softplus(),
-                # nn.Linear(hyperparams["hidden_size"], hyperparams["hidden_size"]),
-                # nn.Softplus(),
-                nn.Linear(hyperparams["hidden_size"], x_dim // 2),
-            ]
-        )
+        # L = torch.nn.Sequential(
+        #     *[
+        #         CosSin(x_dim, angular_dims=hyperparams["angular_dims"]),
+        #         nn.Linear(x_dim + len(hyperparams["angular_dims"]), hyperparams["hidden_size"]),
+        #         nn.Softplus(),
+        #         nn.Linear(hyperparams["hidden_size"], hyperparams["hidden_size"]),
+        #         nn.Softplus(),
+        #         nn.Linear(hyperparams["hidden_size"], 1),
+        #     ]
+        # )
+        # Q = torch.nn.Sequential(
+        #     *[
+        #         CosSin(x_dim, angular_dims=hyperparams["angular_dims"]),
+        #         nn.Linear(x_dim + len(hyperparams["angular_dims"]), hyperparams["hidden_size"]),
+        #         nn.Softplus(),
+        #         # nn.Linear(hyperparams["hidden_size"], hyperparams["hidden_size"]),
+        #         # nn.Softplus(),
+        #         nn.Linear(hyperparams["hidden_size"], x_dim // 2),
+        #     ]
+        # )
         # L = torch.nn.Sequential(
         #     *[
         #         # CosSin(x_dim, angular_dims=hyperparams["angular_dims"]),
@@ -52,7 +52,8 @@ class LNNprior:
         #     ]
         # )
         # lnn = ControlledLNN(L, x_dim)
-        lnn = NonConsLNN(L, Q, x_dim)
+        # lnn = NonConsLNN(L, Q, x_dim)
+        lnn = DeepLagrangianNetwork(x_dim // 2, hyperparams["hidden_size"])
 
         self.model = NeuralDE(func=lnn, solver="dopri8")  # torch.nn.Module
         self.learner = LNNLearner(self.model, self.dt, self.x_dim, hyperparams["lr"])  # pl moudle
@@ -61,7 +62,7 @@ class LNNprior:
         print(xu.shape, dxdu.shape)
         traindata = ptdata.TensorDataset(torch.FloatTensor(xu), torch.FloatTensor(dxdu))
         trainloader = ptdata.DataLoader(
-            traindata, self._hyperparams["batch_size"], shuffle=True, num_workers=0, drop_last=True
+            traindata, self._hyperparams["batch_size"], shuffle=False, num_workers=0, drop_last=True
         )
         self.learner.fit(self._hyperparams["epoch"], trainloader)
 
@@ -128,20 +129,25 @@ class DynamicsLRLNN(Dynamics):
         q = self.x_dim // 2
 
         for t in range(T):
-            xu = torch.FloatTensor(mean_traj[t][self.x_dim:]).reshape(1, -1)
+            xu = torch.FloatTensor(mean_traj[t][self.x_dim :]).reshape(1, -1)
 
             D_qqd_qdd = jacobian(self.prior.model.defunc.m.forward, xu).squeeze()[q : 2 * q].detach().numpy()
             f_star = self.prior.model.defunc(0, xu).squeeze()[q : 2 * q].detach().numpy()
 
-            ident = np.block([
-                              [np.eye(q), np.eye(q) * self.dt, np.zeros((q, self.u_dim))], 
-                              [np.zeros((q, q)), np.eye(q), np.zeros((q, self.u_dim))]
-                              ])
-            AB_t = np.block([[D_qqd_qdd * self.dt**2],[D_qqd_qdd * self.dt]]) + ident
+            ident = np.block(
+                [
+                    [np.eye(q), np.eye(q) * self.dt, np.zeros((q, self.u_dim))],
+                    [np.zeros((q, q)), np.eye(q), np.zeros((q, self.u_dim))],
+                ]
+            )
+            AB_t = np.block([[D_qqd_qdd * self.dt ** 2], [D_qqd_qdd * self.dt]]) + ident
 
-
-            c_t = np.hstack([f_star * self.dt ** 2, f_star * self.dt]) - mean_traj[t][:self.x_dim] + mean_traj[t][self.x_dim:2*self.x_dim]
-            c_t[:self.x_dim] += mean_traj[t][self.x_dim + q:self.x_dim + 2*q] * self.dt
+            c_t = (
+                np.hstack([f_star * self.dt ** 2, f_star * self.dt])
+                - mean_traj[t][: self.x_dim]
+                + mean_traj[t][self.x_dim : 2 * self.x_dim]
+            )
+            c_t[: self.x_dim] += mean_traj[t][self.x_dim + q : self.x_dim + 2 * q] * self.dt
 
             self.AB[t] = AB_t
             self.c[t] = c_t

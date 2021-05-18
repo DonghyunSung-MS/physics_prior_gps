@@ -43,6 +43,7 @@ class CosSin(nn.Module):
         self.input_dim = input_dim
         self.angular_dims = torch.LongTensor(angular_dims)
         self.non_angular_dims = torch.LongTensor(list(set(range(input_dim)) - set(angular_dims)))
+        self.der = None
 
     def forward(self, xu):
         ang_q = xu[:, self.angular_dims]
@@ -50,5 +51,16 @@ class CosSin(nn.Module):
 
         cos_ang_q, sin_ang_q = torch.cos(ang_q), torch.sin(ang_q)
         xu_tansform = torch.cat([cos_ang_q, sin_ang_q, other], dim=-1)
+        self.der = torch.cat([-sin_ang_q, cos_ang_q, other], dim=-1)
 
         return xu_tansform
+
+
+if __name__ == "__main__":
+    input = torch.ones(1, 1) * 3.14
+    cossin = CosSin(1, [0])
+    print(cossin(input))
+    print(cossin.der)
+
+    out = torch.zeros(10, 12, 12) @ torch.zeros(12, 2) @ torch.zeros(10, 2, 1)
+    print(out.shape)

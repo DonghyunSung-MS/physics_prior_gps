@@ -1,5 +1,6 @@
 title = "Guided Policy Search with Physics Prior"
 seed = 1
+
 [prior]
 #MLP
 hidden_size = 128
@@ -10,11 +11,25 @@ angular_dims = [0]
 lr = 0.001
 
 #dynamics epoch per global gps iteration
-epoch = 10
+epoch =10 #1
 batch_size = 100
 
-[gps]
+[global_policy]
+
+epoch_per_iteration=15
+batch_size=20
+layer_depth=3
+hidden_size=128
+act="relu"
+lr = 0.001
+
+[gps_algo]
 max_iter = 5
-M = 1
-N = 5
+M = 3
+N = 7
 T = 100
+
+eta_min = 0.01
+eta_max = 1.0
+
+lg_step = 3

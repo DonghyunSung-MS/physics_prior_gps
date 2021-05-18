@@ -4,17 +4,18 @@ import gym
 import numpy as np
 from gym import spaces
 from gym.utils import seeding
-from scipy.integrate import odeint
+from scipy.integrate import odeint, solve_ivp
 
 
 def angle_normalize(x):
     return ((x + np.pi) % (2 * np.pi)) - np.pi
 
 
-def eom(x, t, m, g, l, u):
+def eom(t, x, m, g, l, u):
+    b = 0.0  # 0.01
     q, q_dot = x
     q = angle_normalize(q)
-    return np.array([q_dot, (float(u) - 0.01 * q_dot) / (m * (l ** 2)) + g / l * np.sin(q)])
+    return np.array([q_dot, (u - b * q_dot) / (m * l ** 2) + g / l * np.sin(q)])
 
 
 class SinglePendulmEnv(gym.Env):
@@ -54,11 +55,11 @@ class SinglePendulmEnv(gym.Env):
 
     def step(self, u):
         th, thdot = self.state  # th := theta
-        t = np.linspace(0, self.dt, int(self.dt * 1000))  # continous -> time step 0.001
-        sol = odeint(eom, self.state, t, args=(self.m, self.g, self.l, u))
+        # t = np.linspace(0, self.dt, int(self.dt * 1000))  # continous -> time step 0.001
+        t = (0, self.dt)
+        sol = solve_ivp(eom, t, self.state, args=(self.m, self.g, self.l, u))
         costs = angle_normalize(th) ** 2 + 0.1 * thdot ** 2 + 0.001 * (u ** 2)
-
-        self.state = sol[-1]
+        self.state = sol.y[:, -1]
         self.last_u = u
         self.state[0] = angle_normalize(self.state[0])
         return self._get_obs(), -costs, False, {}
@@ -99,7 +100,7 @@ class SinglePendulmEnv(gym.Env):
             # self.img = rendering.Image(fname, 1.0, 1.0)
             # self.imgtrans = rendering.Transform()
             # self.img.add_attr(self.imgtrans)
-            
+
         # self.viewer.add_onetime(self.img)
         self.pole_transform.set_rotation(self.state[0] + np.pi / 2)
         self.mass_transform.set_translation(np.cos(self.state[0] + np.pi / 2), np.sin(self.state[0] + np.pi / 2))

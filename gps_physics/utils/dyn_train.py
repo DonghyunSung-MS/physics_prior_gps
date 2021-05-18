@@ -1,7 +1,7 @@
 import torch
 import torchdyn
 import wandb
-
+import numpy as np
 
 class LNNLearner:
     def __init__(self, model: torchdyn.models.NeuralDE, dt, x_dim, lr=0.001):
@@ -31,10 +31,13 @@ class LNNLearner:
         return ((y - y_hat) ** 2).mean()
 
     def fit(self, epoch, dataloader):
+        log_loss = []
         for i in range(epoch):
             for idx, data in enumerate(dataloader):
                 loss = self.training_step(data, idx)
                 self.update(loss)
+                log_loss.append(loss.detach().item())
+                # if idx % 1000 == 0:
+                #     print(f"dyn loss : {loss}")
 
-                if idx % 100 == 0:
-                    print(f"loss : {loss}")
+        print(f"dyn loss : {np.mean(log_loss)}")
