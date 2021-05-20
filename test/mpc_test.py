@@ -1,4 +1,5 @@
 import os
+from cvxpy.settings import NONNEG
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -12,6 +13,8 @@ from gps_physics.algorithms.cost.cost import SinglePendulmAugCost, SinglePendulm
 from gps_physics.algorithms.dynamics.lnn_dynamics import DynamicsLRLNN
 from gps_physics.algorithms.policy.lg_policy import LGPolicy
 from gps_physics.algorithms.policy.NN_policy import NNPolicy
+from gps_physics.algorithms.policy.mpc_policy import MPCPolicy
+
 from gps_physics.gym_env.single_pendulm import SinglePendulmEnv
 from gps_physics.utils.samples import TrajectoryBuffer
 from gps_physics.utils.traj_utils import *
@@ -46,25 +49,13 @@ if __name__ == "__main__":
     u_dim = env.action_space.shape[0]
 
     dynamics_lr = DynamicsLRLNN(x_dim, u_dim, dt, config)
-
-    lg_policy_list = []
-    gl_policy = NNPolicy(x_dim, u_dim, hyperparams=config["global_policy"])
-
-    # set initial policy
-    for m in range(M):
-        lg = LGPolicy(x_dim, u_dim, dt, config)
-        lg.K = 0.01*np.random.randn(T, u_dim, x_dim)
-        lg.k = 0.01*np.random.randn(T, u_dim)
-        lg.cov = np.stack([np.eye(u_dim) for _ in range(T)])
-        lg_policy_list.append(lg)
-
-    # sing_pen_augcost = SinglePendulmAugCost(1.0, 0.1, 0.001)
+    mpc_policies = [MPCPolicy(x_dim, u_dim, dt, config) for _ in range(M)]
     sing_pen_cost = SinglePendulmCost(1.0, 0.1, 0.001)
 
 
     env.reset()
 
-    reset_states = [np.array([0.1, 0.0]), np.array([np.pi / 2.0 + 0.1, 0.0]), np.array([-np.pi / 2.0, 0.0])]
+    reset_states = [np.array([0.1, 0.0]), np.array([np.pi-0.1, 0.0]), np.array([np.pi / 2.0, 0.0])]
 
     exp_buffer = []
 
@@ -76,15 +67,18 @@ if __name__ == "__main__":
         else:
             mean_traj = exp_buffer[i - 1].mean_traj
         for m in range(M):
+            AB, c= None, None
+            if i!=0:
+                AB, c, W = dynamics_lr.fit(mean_traj[m])
+                mpc_policies[m].forward(mean_traj[m], reset_states[m], AB, c, sing_pen_cost)
+
             for n in range(N):
                 # print(m, n)
                 env.reset()
                 env.state = reset_states[m]
                 obs = env._get_obs()  # x0
                 for t in range(T):
-                    action = None
-                    # if i==0:
-                    action = lg_policy_list[m].get_action(t, obs, mean_traj[m][t][x_dim : x_dim * 2], mean_traj[m][t][-u_dim:], max_torque)
+                    action = mpc_policies[m].get_action(t, mean_traj[m], obs, AB, c, sing_pen_cost)
                     if action[0]>=2.0 or action[0]<=-2.0:
                         print(f"init {m}, time {t}, act: {action[0]:0.1f}")
                     next_obs, reward, done, _ = env.step(action[0])
@@ -98,45 +92,13 @@ if __name__ == "__main__":
         exp_buffer.append(iter_traj)
         dynamics_lr.updata_prior(exp_buffer)
 
-        # if i == 0:
-        #     lg_K = []
-        #     lg_k = []
-        #     lg_cov = []
-        #     for m in range(M):
-        #         lg_K.append(lg_policy_list[m].K)
-        #         lg_k.append(lg_policy_list[m].k)
-        #         lg_cov.append(lg_policy_list[m].cov)
-        #         iter_traj.mean_traj[m] = np.mean(iter_traj.traj[m], axis=0)
-
-        #     gl_policy.fit(np.stack(lg_K), np.stack(lg_k), np.stack(lg_cov), iter_traj)
-
-        # lg_K = []
-        # lg_k = []
-        # lg_cov = []
-
+        # update trajectory
         for m in range(M):
-            epsilon = 1.0
-            eta = 1.0
-            dynamics_lr.fit(mean_traj[m])
-            mean_traj_at_m = None
-            joint_cov_at_m = None
-            mean_traj_at_m, joint_cov_at_m, l = lg_policy_list[m].fit(
-                                                            reset_states[m], dynamics_lr, mean_traj[m], sing_pen_cost)
-            # gps iteration
-            # for _ in range(lg_step):
-            #     mean_traj_at_m, joint_cov_at_m, l = lg_policy_list[m].fit(
-            #         reset_states[m], dynamics_lr, mean_traj[m], sing_pen_augcost, gl_policy=gl_policy, eta=eta
-            #     )
-            #     kl_traj = kl_trajectory(mean_traj_at_m, lg_policy_list[m], gl_policy)
-            #     eta = eta_adjust(kl_traj, eta, eta_min, eta_max, epsilon)
-            #     print(f"{i}th iter eta: {eta}, kl_traj {kl_traj}")
+            if i == 0:
+                mean_traj[m] = np.mean(iter_traj.traj[m], axis=0)
+            print(f"update {m} init condition")
+            AB, c, W = dynamics_lr.fit(mean_traj[m])
+            new_traj, new_est_cost, _ = mpc_policies[m].forward(mean_traj[m], reset_states[m], AB, c, sing_pen_cost)
+            exp_buffer[i].mean_traj[m] = new_traj
 
-            print(f"{m}th init cost: {l}")
-            exp_buffer[i].mean_traj[m] = mean_traj_at_m
-        #     iter_traj.joint_cov[m] = joint_cov_at_m
 
-        #     lg_K.append(lg_policy_list[m].K)
-        #     lg_k.append(lg_policy_list[m].k)
-        #     lg_cov.append(lg_policy_list[m].cov)
-
-        # gl_policy.fit(np.stack(lg_K), np.stack(lg_k), np.stack(lg_cov), iter_traj)

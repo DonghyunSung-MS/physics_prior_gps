@@ -1,10 +1,11 @@
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.utils.data as pt_data
 from torch.autograd.functional import jacobian
 
 from gps_physics.algorithms.policy.policy import Policy
-from gps_physics.utils.ptu import mlp
+from gps_physics.utils.ptu import mlp, CosSin
 
 
 class NNPolicy(Policy):
@@ -12,11 +13,23 @@ class NNPolicy(Policy):
         super().__init__(hyperparams)
         self.x_dim = x_dim
         self.u_dim = u_dim
-
-        self.model = mlp(x_dim, hyperparams["hidden_size"], u_dim, hyperparams["layer_depth"], hyperparams["act"])
+        self.model = torch.nn.Sequential(
+                            *[
+                                CosSin(x_dim, angular_dims=hyperparams["angular_dims"]),
+                                nn.Linear(x_dim + len(hyperparams["angular_dims"]), hyperparams["hidden_size"]),
+                                nn.Softplus(),
+                                nn.Linear(hyperparams["hidden_size"], hyperparams["hidden_size"]),
+                                nn.Softplus(),
+                                nn.Linear(hyperparams["hidden_size"], u_dim),
+                                nn.Tanh(),
+                                # nn.Linear(x_dim, u_dim),
+                            ]
+                        )
         self.optim = torch.optim.Adam(self.model.parameters(), lr=hyperparams["lr"])
 
         self.pi_cov = np.eye(u_dim)
+
+
 
     def to_lg_policy(self, xu):
         x_dim = self.x_dim
@@ -31,8 +44,8 @@ class NNPolicy(Policy):
 
         pt_state = torch.FloatTensor(state)
 
-        K = jacobian(self.model, pt_state).detach().numpy()
-        k = self.model(pt_state).detach().numpy() - K @ state + action
+        K = jacobian(self.model, pt_state.reshape(1, -1)).reshape(u_dim, x_dim).detach().numpy()
+        k = self.model(pt_state.reshape(1, -1)).reshape(-1).detach().numpy() - K @ state
         cov = self.pi_cov
 
         return K, k, cov
@@ -45,14 +58,14 @@ class NNPolicy(Policy):
         np_action_nominal = traj_buffer.mean_traj[:, np.newaxis, :, -self.u_dim :]  # M 1 T U
 
         pt_state = torch.FloatTensor(np_state_sample).reshape(-1, self.x_dim)
-        lg_K_tile = np.tile(lg_K[:, np.newaxis, :, :, :], (1, N, 1, 1, 1))
-        mean_action = (
-            np.squeeze(lg_K_tile @ (np_state_sample - np_state_nominal)[:, :, :, :, np.newaxis], axis=-1)
-            + lg_k[:, np.newaxis, :, :]
-            + np_action_nominal
-        )  # M x N x T x U
+        # lg_K_tile = np.tile(lg_K[:, np.newaxis, :, :, :], (1, N, 1, 1, 1))
+        # mean_action = (
+        #     np.squeeze(lg_K_tile @ (np_state_sample - np_state_nominal)[:, :, :, :, np.newaxis], axis=-1)
+        #     + lg_k[:, np.newaxis, :, :]
+        #     + np_action_nominal
+        # )  # M x N x T x U
 
-        pt_mean_action = torch.FloatTensor(mean_action)  # M x N x T x U
+        pt_mean_action = torch.FloatTensor(np_action_nominal).repeat(1,N,1,1)  # M x N x T x U
         pt_mean_action = pt_mean_action.reshape(-1, self.u_dim)
         print(pt_mean_action.shape)
 
@@ -91,5 +104,23 @@ class NNPolicy(Policy):
 
     def get_action(self, state):
         pt_state = torch.FloatTensor(state)
-        action = self.model(pt_state).detach().numpy()
+        action = self.model(pt_state.reshape(1, -1)).reshape(-1).detach().numpy()
         return action
+
+if __name__ == "__main__":
+    from torch.autograd.functional import jacobian
+    x_dim = 2
+    u_dim = 1
+
+    model = torch.nn.Sequential(
+                            *[
+                                CosSin(x_dim, angular_dims=[0]),
+                                nn.Linear(x_dim + len([0]), 128),
+                                nn.Softplus(),
+                                nn.Linear(128, 128),
+                                nn.Softplus(),
+                                nn.Linear(128, u_dim),
+                            ]
+                        )
+
+    print(jacobian(model, torch.ones(2).reshape(1,-1)).reshape(-1))

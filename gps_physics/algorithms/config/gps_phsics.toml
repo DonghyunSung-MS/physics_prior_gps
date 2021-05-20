@@ -15,21 +15,21 @@ epoch =10 #1
 batch_size = 100
 
 [global_policy]
-
+angular_dims = [0]
 epoch_per_iteration=15
-batch_size=20
+batch_size=100
 layer_depth=3
-hidden_size=128
-act="relu"
+hidden_size=64
+act="softplus"
 lr = 0.001
 
 [gps_algo]
-max_iter = 5
+max_iter = 10
 M = 3
 N = 7
-T = 100
+T = 200
 
 eta_min = 0.01
 eta_max = 1.0
 
-lg_step = 3
+lg_step = 4

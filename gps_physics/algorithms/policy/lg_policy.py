@@ -86,7 +86,7 @@ class LGPolicy(Policy):
                 prev_mean_traj[t][x_dim : x_dim + x_dim],
                 prev_mean_traj[t][-u_dim:],
             )
-            joint_mean_t = np.hstack([marginal_state_mean, self.K[t] @ (marginal_state_mean - x_star) + self.k[t] + u_star])
+            joint_mean_t = np.hstack([marginal_state_mean, self.get_action(t, marginal_state_mean, x_star, u_star, 1.0)])
 
             l += cost.eval_cost(joint_mean_t)
 
@@ -114,5 +114,6 @@ class LGPolicy(Policy):
 
         return mean_traj, joint_cov, l
 
-    def get_action(self, t, state, x_star, u_star):
-        return self.K[t] @ (state - x_star) + self.k[t] + u_star
+    def get_action(self, t, state, x_star, u_star, max_torque):
+        pre_action = self.K[t] @ (state - x_star) + self.k[t] + u_star
+        return pre_action#np.clip(pre_action, -max_torque, max_torque)

@@ -33,7 +33,7 @@ class SinglePendulmEnv(gym.Env):
 
     def __init__(self, m, l, dt, g=9.8):
         self.max_speed = 8
-        self.max_torque = 2.0
+        self.max_torque = 1.0
         self.dt = dt
         self.g = g
         self.m = m
@@ -54,6 +54,7 @@ class SinglePendulmEnv(gym.Env):
         return self.state
 
     def step(self, u):
+        # u = np.clip(u, -self.max_torque, self.max_torque)
         th, thdot = self.state  # th := theta
         # t = np.linspace(0, self.dt, int(self.dt * 1000))  # continous -> time step 0.001
         t = (0, self.dt)

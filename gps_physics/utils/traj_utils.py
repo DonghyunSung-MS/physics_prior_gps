@@ -11,22 +11,22 @@ def kl_trajectory(mean_traj, lg_policy, gl_policy):
         state = mean_traj[t][x_dim : x_dim + x_dim]
         action = mean_traj[t][-u_dim:]
 
-        loc_mean = lg_policy.get_action(t, state, state, action)
+        loc_mean = lg_policy.get_action(t, state, state, action, 1.0)
         loc_cov = lg_policy.cov[t]
 
-        lg_mean = gl_policy.get_action(state)
-        lg_cov = gl_policy.pi_cov
+        gl_mean = gl_policy.get_action(state)
+        gl_cov = gl_policy.pi_cov
 
-        lg_cov_inv = np.linalg.inv(lg_cov)
-        mean_diff = loc_mean - lg_mean
+        gl_cov_inv = np.linalg.inv(gl_cov)
+        mean_diff = loc_mean - gl_mean
 
-        print(f"mean_diff: {mean_diff}")
+        # print(f"mean_diff: {mean_diff}")
 
         kl += (
-            np.trace(lg_cov_inv @ loc_cov)
-            + (mean_diff.reshape(1, -1) @ lg_cov_inv @ mean_diff)[0]
+            np.trace(gl_cov_inv @ loc_cov)
+            + (mean_diff.reshape(1, -1) @ gl_cov_inv @ mean_diff)[0]
             - u_dim
-            + np.log(np.linalg.det(lg_cov))
+            + np.log(np.linalg.det(gl_cov_inv))
             - np.log(np.linalg.det(loc_cov))
         )
 
@@ -34,13 +34,7 @@ def kl_trajectory(mean_traj, lg_policy, gl_policy):
 
 
 def eta_adjust(kl_traj, cur_eta, min_eta, max_eta, epsilon):
-    new_eta = None
-
-    if kl_traj < 0.9 * epsilon:
-        new_eta = min([0.1 * cur_eta, (max_eta * cur_eta) ** 0.5])
-    elif kl_traj >= 0.9 * epsilon and kl_traj <= 1.1 * epsilon:
-        new_eta = cur_eta
-    else:
-        new_eta = max([0.1 * cur_eta, (cur_eta * min_eta) ** 0.5])
+    
+    new_eta = np.clip(cur_eta + 0.01 * (kl_traj - epsilon), min_eta, max_eta)
     
     return new_eta

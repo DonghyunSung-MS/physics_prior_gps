@@ -38,7 +38,7 @@ class SinglePendulmAugCost(SinglePendulmCost):
 
         policy_const = (k.reshape(1, -1) @ cov_inv @ k)[0]
 
-        return self.l_xuxu * eta + policy_quad, self.l_xu(xu) * eta + policy_linear, self.l_c * eta + policy_const
+        return self.l_xuxu / eta + policy_quad, self.l_xu(xu) / eta + policy_linear, self.l_c / eta + policy_const
 
     def eval_cost(self, xu):
         cost = 0.5 * np.squeeze(xu.reshape(1, -1) @ self.l_xuxu @ xu.reshape(-1, 1))
