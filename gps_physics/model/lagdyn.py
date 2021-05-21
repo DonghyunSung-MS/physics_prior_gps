@@ -110,7 +110,7 @@ class NonConsLNN(nn.Module):
 
 
 class DeepLagrangianNetwork(nn.Module):
-    def __init__(self, q_dim, hidden_dim=64, device="cpu", angular_dims=None):
+    def __init__(self, q_dim, hidden_dim=64, device="cpu", angular_dims=None, input_matrix=nn.Identity()):
         if angular_dims == None:
             angular_dims = range(q_dim)
         super().__init__()
@@ -131,6 +131,8 @@ class DeepLagrangianNetwork(nn.Module):
         self.neg_slope = -0.01
         self.device = device
         self.interim_values = {}
+        self.input_matrix = input_matrix
+        self.input_matrix.requires_grad_(False)
 
     def compute_gradients_for_forward_pass(self, qdot, h1, h2, h3):
         """
@@ -142,9 +144,11 @@ class DeepLagrangianNetwork(nn.Module):
         dRelu_fc1 = torch.where(
             h1 > 0, torch.ones(h1.shape, device=self.device), self.neg_slope * torch.ones(h1.shape, device=self.device)
         )
-        # print(torch.diag_embed(dRelu_fc1).shape, self.fc1.weight.shape)
-        dh1_dq = torch.diag_embed(dRelu_fc1) @ self.fc1.weight @ self.cos_sin_embdeing.der.unsqueeze(2)
-        # print(dh1_dq.shape)
+        # print(torch.diag_embed(dRelu_fc1).shape, self.fc1.weight.shape, (torch.diag_embed(dRelu_fc1) @ self.fc1.weight).shape)
+        # print(self.cos_sin_embdeing.der.shape)
+
+        dh1_dq = torch.diag_embed(dRelu_fc1) @ self.fc1.weight @ self.cos_sin_embdeing.der
+        # dh1_dq = torch.diag_embed(dRelu_fc1) @ self.fc1.weight
 
         dRelu_fc2 = torch.where(
             h2 > 0, torch.ones(h2.shape, device=self.device), self.neg_slope * torch.ones(h2.shape, device=self.device)
@@ -158,6 +162,9 @@ class DeepLagrangianNetwork(nn.Module):
 
         dld_dq = dld_dh2 @ dh2_dh1 @ dh1_dq
         dlo_dq = dlo_dh2 @ dh2_dh1 @ dh1_dq
+
+        # print(f"dhdq {dh1_dq.shape}")
+        # print(f"dld_dq {dld_dq.shape}")
 
         dld_dt = (dld_dq @ qdot.view(n, d, 1)).squeeze(-1)
         dlo_dt = (dlo_dq @ qdot.view(n, d, 1)).squeeze(-1)
@@ -228,12 +235,16 @@ class DeepLagrangianNetwork(nn.Module):
         return tau.reshape(n, d), H.reshape(n, d, d), c.reshape(n, d), g.reshape(n, d)
 
     def forward(self, xu):
+        # print(xu.shape)
         q, q_dot, u = torch.chunk(xu, chunks=3, dim=1)
-        qddot = torch.zeros_like(u)
+        # print(self.input_matrix(u).shape)
+        # print(u.shape)
+        qddot = torch.zeros_like(q)
+        # print(qddot.shape)
         q_qd_qdd = torch.cat([q, q_dot, qddot], dim=1)
 
         tau, H, c, g = self.inverse_dyn(q_qd_qdd)
-        qddot_pred = torch.einsum("ijk, ij -> ik", H.inverse(), (u - c - g))
+        qddot_pred = torch.einsum("ijk, ij -> ik", H.inverse(), (self.input_matrix(u) - c - g))
 
         return torch.cat([q_dot, qddot_pred, torch.zeros_like(u)], dim=1)
 
