@@ -1,0 +1,43 @@
+title = "Policy Search with Physics Prior"
+
+max_iter = 10
+seed = 1
+
+mass = 0.5
+length = 0.25
+x_dim = 2
+u_dim = 1
+dt = 0.01
+max_torque = 2.0
+
+T = 250
+M = 3
+N = 7
+
+[dyna_prior]
+#MLP
+hidden_size = 128
+layer_depths = 2
+act = "softplus"
+
+angular_dims = [0]
+lr = 0.001
+
+#dynamics epoch per global gps iteration
+epoch =10 #1
+batch_size = 100
+
+[global_policy]
+angular_dims = [0]
+epoch_per_iteration=15
+batch_size=100
+layer_depth=3
+hidden_size=64
+act="softplus"
+lr = 0.001
+
+
+# eta_min = 0.01
+# eta_max = 1.0
+
+# lg_step = 4

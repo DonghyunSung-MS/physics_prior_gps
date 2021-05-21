@@ -9,14 +9,15 @@ from gps_physics.utils.ptu import mlp, CosSin
 
 
 class NNPolicy(Policy):
-    def __init__(self, x_dim, u_dim, hyperparams):
+    def __init__(self, hyperparams):
+        self.x_dim = hyperparams["x_dim"]
+        self.u_dim = hyperparams["u_dim"]
+
+        hyperparams = hyperparams["global_policy"]
         super().__init__(hyperparams)
-        self.x_dim = x_dim
-        self.u_dim = u_dim
         self.model = torch.nn.Sequential(
                             *[
-                                CosSin(x_dim, angular_dims=hyperparams["angular_dims"]),
-                                nn.Linear(x_dim + len(hyperparams["angular_dims"]), hyperparams["hidden_size"]),
+                                nn.Linear(x_dim, hyperparams["hidden_size"]),
                                 nn.Softplus(),
                                 nn.Linear(hyperparams["hidden_size"], hyperparams["hidden_size"]),
                                 nn.Softplus(),
@@ -50,52 +51,28 @@ class NNPolicy(Policy):
 
         return K, k, cov
 
-    def fit(self, lg_K, lg_k, lg_cov, traj_buffer):
-        M, N, T, _ = traj_buffer.traj.shape
-
-        np_state_sample = traj_buffer.traj[:, :, :, self.x_dim : 2 * self.x_dim]  # M N T U
-        np_state_nominal = traj_buffer.mean_traj[:, np.newaxis, :, self.x_dim : 2 * self.x_dim]  # M 1 T X
-        np_action_nominal = traj_buffer.mean_traj[:, np.newaxis, :, -self.u_dim :]  # M 1 T U
-
-        pt_state = torch.FloatTensor(np_state_sample).reshape(-1, self.x_dim)
-        # lg_K_tile = np.tile(lg_K[:, np.newaxis, :, :, :], (1, N, 1, 1, 1))
-        # mean_action = (
-        #     np.squeeze(lg_K_tile @ (np_state_sample - np_state_nominal)[:, :, :, :, np.newaxis], axis=-1)
-        #     + lg_k[:, np.newaxis, :, :]
-        #     + np_action_nominal
-        # )  # M x N x T x U
-
-        pt_mean_action = torch.FloatTensor(np_action_nominal).repeat(1,N,1,1)  # M x N x T x U
-        pt_mean_action = pt_mean_action.reshape(-1, self.u_dim)
-        print(pt_mean_action.shape)
-
-        pt_cov = torch.FloatTensor(lg_cov).unsqueeze(1).repeat(1, N, 1, 1, 1)  # M x N x T x U x U
-        pt_cov = pt_cov.reshape(-1, self.u_dim, self.u_dim)
-
-        train_data = pt_data.TensorDataset(pt_state, pt_mean_action, pt_cov)
+    def fit(self, state:np.array, action:np.array):
+        
+        pt_state = torch.FloatTensor(state)
+        pt_action = torch.FloatTensor(action)
+        
+        train_data = pt_data.TensorDataset(pt_state, pt_action)
         train_dataloader = pt_data.DataLoader(train_data, batch_size=self._hyperparams["batch_size"], shuffle=True)
 
         epoch = self._hyperparams["epoch_per_iteration"]
         log_loss = []
         for i in range(epoch):
             for idx, data in enumerate(train_dataloader):
-                state_sample, acion_sample, pt_cov_sample = data
+                state_sample, action_sample = data
 
                 state_sample = state_sample.requires_grad_(True)
-                acion_sample = acion_sample.requires_grad_(True)
-                pt_cov_sample = pt_cov_sample.requires_grad_(True)
+                action_sample = action_sample.requires_grad_(True)
 
                 action_pred = self.model(state_sample)
-                loss = (
-                    (action_pred - acion_sample).unsqueeze(1)
-                    @ pt_cov_sample.inverse()
-                    @ (action_pred - acion_sample).unsqueeze(2)
-                )
+                loss = (action_sample - action_pred)**2
                 loss = loss.mean()
 
                 log_loss.append(loss.detach().item())
-                # if idx % 100 == 0:
-                #     print(f"policy loss {loss}")
                 self.optim.zero_grad()
                 loss.backward()
                 self.optim.step()

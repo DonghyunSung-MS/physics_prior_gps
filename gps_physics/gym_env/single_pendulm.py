@@ -5,7 +5,7 @@ import numpy as np
 from gym import spaces
 from gym.utils import seeding
 from scipy.integrate import odeint, solve_ivp
-
+import warnings
 
 def angle_normalize(x):
     return ((x + np.pi) % (2 * np.pi)) - np.pi
@@ -31,9 +31,9 @@ class SinglePendulmEnv(gym.Env):
 
     metadata = {"render.modes": ["human", "rgb_array"], "video.frames_per_second": 30}
 
-    def __init__(self, m, l, dt, g=9.8):
+    def __init__(self, m, l, dt, g=9.8, max_torque=1.0):
         self.max_speed = 8
-        self.max_torque = 1.0
+        self.max_torque = max_torque
         self.dt = dt
         self.g = g
         self.m = m
@@ -54,7 +54,11 @@ class SinglePendulmEnv(gym.Env):
         return self.state
 
     def step(self, u):
-        # u = np.clip(u, -self.max_torque, self.max_torque)
+        if isinstance(u, np.ndarray) and u.shape[0]==1:
+            u = u[0]
+        if u > self.max_torque + 0.1 or u < - self.max_torque - 0.1:
+            warnings.warn(f"action {u:0.3f} beyond limit")
+
         th, thdot = self.state  # th := theta
         # t = np.linspace(0, self.dt, int(self.dt * 1000))  # continous -> time step 0.001
         t = (0, self.dt)
@@ -97,7 +101,7 @@ class SinglePendulmEnv(gym.Env):
             self.viewer.add_geom(axle)
 
             fname = path.join(path.dirname(__file__), "assets/clockwise.png")
-            print(fname)
+            # print(fname)
             # self.img = rendering.Image(fname, 1.0, 1.0)
             # self.imgtrans = rendering.Transform()
             # self.img.add_attr(self.imgtrans)

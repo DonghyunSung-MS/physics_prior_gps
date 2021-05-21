@@ -5,11 +5,33 @@ from gps_physics.algorithms.policy.policy import Policy
 
 
 class LGPolicy(Policy):
-    def __init__(self, x_dim, u_dim, dt, hyperparams):
+    def __init__(self, hyperparams, K=None, k=None, cov=None):
         super().__init__(hyperparams)
-        self.x_dim = x_dim
-        self.u_dim = u_dim
-        self.dt = dt
+        self.x_dim = hyperparams["x_dim"]
+        self.u_dim = hyperparams["u_dim"]
+        self.dt = hyperparams["dt"]
+        self.T = hyperparams["T"]
+
+        self.init_policy(K, k, cov)
+    
+    def init_policy(self, K=None, k=None, cov=None):
+        if K is None:
+            self.K = 0.01*np.random.randn(self.T, self.u_dim, self.x_dim)
+        else:
+            assert (K.shape[0] == self.T and K.shape[1] == self.u_dim and K.shape[2] == self.x_dim)
+            self.K = K
+
+        if k is None:
+            self.k =  0.01*np.random.randn(self.T, self.u_dim)
+        else:
+            assert (k.shape[0] == self.T and k.shape[1] == self.u_dim)
+            self.k = k
+
+        if cov is None:
+            self.cov =  np.stack([np.eye(self.u_dim) for _ in range(self.T)])
+        else:
+            assert (cov.shape[0] == self.T and cov.shape[1] == self.u_dim and cov.shape[2] == self.u_dim)
+            self.cov = cov            
 
     def backward(self, mean_traj, dynamics, cost, **kwargs):
         gl_policy = kwargs.get("gl_policy")
@@ -86,7 +108,7 @@ class LGPolicy(Policy):
                 prev_mean_traj[t][x_dim : x_dim + x_dim],
                 prev_mean_traj[t][-u_dim:],
             )
-            joint_mean_t = np.hstack([marginal_state_mean, self.get_action(t, marginal_state_mean, x_star, u_star, 1.0)])
+            joint_mean_t = np.hstack([marginal_state_mean, self.get_action(t, marginal_state_mean, x_star, u_star)])
 
             l += cost.eval_cost(joint_mean_t)
 
@@ -114,6 +136,6 @@ class LGPolicy(Policy):
 
         return mean_traj, joint_cov, l
 
-    def get_action(self, t, state, x_star, u_star, max_torque):
+    def get_action(self, t, state, x_star, u_star):
         pre_action = self.K[t] @ (state - x_star) + self.k[t] + u_star
-        return pre_action#np.clip(pre_action, -max_torque, max_torque)
+        return pre_action

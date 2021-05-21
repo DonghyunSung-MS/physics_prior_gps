@@ -21,39 +21,8 @@ class LNNprior:
         self.dt = dt
         self.x_dim = x_dim
         self.u_dim = u_dim
-        # L = torch.nn.Sequential(
-        #     *[
-        #         CosSin(x_dim, angular_dims=hyperparams["angular_dims"]),
-        #         nn.Linear(x_dim + len(hyperparams["angular_dims"]), hyperparams["hidden_size"]),
-        #         nn.Softplus(),
-        #         nn.Linear(hyperparams["hidden_size"], hyperparams["hidden_size"]),
-        #         nn.Softplus(),
-        #         nn.Linear(hyperparams["hidden_size"], 1),
-        #     ]
-        # )
-        # Q = torch.nn.Sequential(
-        #     *[
-        #         CosSin(x_dim, angular_dims=hyperparams["angular_dims"]),
-        #         nn.Linear(x_dim + len(hyperparams["angular_dims"]), hyperparams["hidden_size"]),
-        #         nn.Softplus(),
-        #         # nn.Linear(hyperparams["hidden_size"], hyperparams["hidden_size"]),
-        #         # nn.Softplus(),
-        #         nn.Linear(hyperparams["hidden_size"], x_dim // 2),
-        #     ]
-        # )
-        # L = torch.nn.Sequential(
-        #     *[
-        #         # CosSin(x_dim, angular_dims=hyperparams["angular_dims"]),
-        #         nn.Linear(x_dim, hyperparams["hidden_size"]),
-        #         nn.Softplus(),
-        #         nn.Linear(hyperparams["hidden_size"], hyperparams["hidden_size"]),
-        #         nn.Softplus(),
-        #         nn.Linear(hyperparams["hidden_size"], 1),
-        #     ]
-        # )
-        # lnn = ControlledLNN(L, x_dim)
-        # lnn = NonConsLNN(L, Q, x_dim)
-        lnn = DeepLagrangianNetwork(x_dim // 2, hyperparams["hidden_size"])
+
+        lnn = DeepLagrangianNetwork(x_dim // 2, hyperparams["hidden_size"], angular_dims=hyperparams["angular_dims"])
 
         self.model = NeuralDE(func=lnn, solver="dopri8")  # torch.nn.Module
         self.learner = LNNLearner(self.model, self.dt, self.x_dim, hyperparams["lr"])  # pl moudle
@@ -68,13 +37,14 @@ class LNNprior:
 
 
 class DynamicsLRLNN(Dynamics):
-    def __init__(self, x_dim, u_dim, dt, hyperparams):
+    def __init__(self, hyperparams):
         Dynamics.__init__(self, hyperparams)
 
-        self.prior = LNNprior(x_dim, u_dim, dt, hyperparams["prior"])
-        self.x_dim = x_dim
-        self.u_dim = u_dim
-        self.dt = dt
+        self.x_dim = hyperparams["x_dim"]
+        self.u_dim = hyperparams["u_dim"]
+        self.dt = hyperparams["dt"]
+
+        self.prior = LNNprior(self.x_dim , self.u_dim, self.dt, hyperparams["dyna_prior"])
 
     def updata_prior(self, x_xu: List[TrajectoryBuffer]):
         """Construct Data Loader for physic prior

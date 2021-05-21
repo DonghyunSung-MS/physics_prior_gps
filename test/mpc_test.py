@@ -30,7 +30,7 @@ torch.manual_seed(config["seed"])
 
 
 if __name__ == "__main__":
-    max_torque = 1.0
+    max_torque = 2.0
     MAX_ITER = config["gps_algo"]["max_iter"]
     M = config["gps_algo"]["M"]  # num initial
     N = config["gps_algo"]["N"]  # num traj per initial condition
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     u_dim = env.action_space.shape[0]
 
     dynamics_lr = DynamicsLRLNN(x_dim, u_dim, dt, config)
-    mpc_policies = [MPCPolicy(x_dim, u_dim, dt, config) for _ in range(M)]
+    mpc_policies = [MPCPolicy(x_dim, u_dim, dt, config, u_min=-max_torque, u_max=max_torque) for _ in range(M)]
     sing_pen_cost = SinglePendulmCost(1.0, 0.1, 0.001)
 
 
@@ -79,8 +79,6 @@ if __name__ == "__main__":
                 obs = env._get_obs()  # x0
                 for t in range(T):
                     action = mpc_policies[m].get_action(t, mean_traj[m], obs, AB, c, sing_pen_cost)
-                    if action[0]>=2.0 or action[0]<=-2.0:
-                        print(f"init {m}, time {t}, act: {action[0]:0.1f}")
                     next_obs, reward, done, _ = env.step(action[0])
                     iter_traj.push_transition(m, n, t, obs, action, next_obs)
                     if n == 0:

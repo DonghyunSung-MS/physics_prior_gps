@@ -45,14 +45,14 @@ if __name__ == "__main__":
     x_dim = env.observation_space.shape[0]
     u_dim = env.action_space.shape[0]
 
-    dynamics_lr = DynamicsLRLNN(x_dim, u_dim, dt, config)
+    dynamics_lr = DynamicsLRLNN(config)
 
     lg_policy_list = []
     gl_policy = NNPolicy(x_dim, u_dim, hyperparams=config["global_policy"])
 
     # set initial policy
     for m in range(M):
-        lg = LGPolicy(x_dim, u_dim, dt, config)
+        lg = LGPolicy(config)
         lg.K = 0.01*np.random.randn(T, u_dim, x_dim)
         lg.k = 0.01*np.random.randn(T, u_dim)
         lg.cov = np.stack([np.eye(u_dim) for _ in range(T)])
