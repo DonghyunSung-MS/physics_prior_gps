@@ -1,3 +1,4 @@
+import warnings
 from os import path
 
 import gym
@@ -60,9 +61,9 @@ class DoublePendulmEnv(gym.Env):  # Acrobat underactuated
 
     metadata = {"render.modes": ["human", "rgb_array"], "video.frames_per_second": 30}
 
-    def __init__(self, m, l, dt, g=9.8):
+    def __init__(self, m, l, dt, g=9.8, max_torque=1.0):
         self.max_speed = 8
-        self.max_torque = 2.0
+        self.max_torque = max_torque
         self.dt = dt
         self.g = g
         self.m = m
@@ -88,6 +89,11 @@ class DoublePendulmEnv(gym.Env):  # Acrobat underactuated
         return self.state
 
     def step(self, u):
+        if isinstance(u, np.ndarray) and u.shape[0] == 1:
+            u = u[0]
+        if u > self.max_torque + 0.1 or u < -self.max_torque - 0.1:
+            warnings.warn(f"action {u:0.3f} beyond limit")
+
         q, q_dot = np.split(self.state, 2)
 
         t = np.linspace(0, self.dt, int(self.dt * 1000))  # continous -> time step 0.001

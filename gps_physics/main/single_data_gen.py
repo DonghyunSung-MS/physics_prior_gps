@@ -142,7 +142,9 @@ def main():
 
         prev_returns = returns.copy()
 
-    data_buffer.save(args.type + "single_pen.pkl")
+    data_buffer.save(args.type + "_single_pen_data.pkl")
+    dynamics_lr.save(args.type + "_single_pen_dynamics.pkl")
+    
 
 
 if __name__ == "__main__":

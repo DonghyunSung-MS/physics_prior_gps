@@ -21,10 +21,10 @@ global_policy = NNPolicy(CONFIG)
 
 if args.train:
     buffer = SuperviseBuffer(int(1e5))
-    buffer.load(args.pkl)
+    buffer.load(args.dpkl)
 
     states, actions = buffer.get_data()
-    global_policy.fit(states, actions)
+    global_policy.fit(states, actions, args.ppkl)
 
 else:
     global_policy.load(args.ppkl)
@@ -41,7 +41,8 @@ else:
         env.state = reset_state
         obs = env._get_obs()
 
-        for t in range(T):
+        for t in range(2*T):
             action = global_policy.get_action(obs)
             next_obs, reward, done, _ = env.step(action)
             obs = next_obs
+            env.render()
