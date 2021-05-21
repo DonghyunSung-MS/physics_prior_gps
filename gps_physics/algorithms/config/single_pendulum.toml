@@ -16,6 +16,7 @@ N = 7
 
 [dyna_prior]
 #MLP
+input_mat = [[1.0]]
 hidden_size = 128
 layer_depths = 2
 act = "softplus"
