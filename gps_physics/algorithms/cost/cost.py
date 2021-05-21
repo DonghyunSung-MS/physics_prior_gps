@@ -23,6 +23,7 @@ class SinglePendulmCost(Cost):
         cost = 0.5 * np.squeeze(xu.reshape(1, -1) @ self.l_xuxu @ xu.reshape(-1, 1))
         return cost
 
+
 class DoublePendulmCost(Cost):
     def __init__(self, angle_w, vel_w, u_w):
         super().__init__()

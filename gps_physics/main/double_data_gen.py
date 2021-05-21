@@ -53,12 +53,13 @@ def main():
     data_buffer = SuperviseBuffer(int(1e5))
 
     env.reset()
-    reset_states = [np.array([0.1, 0.1, 0.0, 0.0]), 
-                    np.array([np.pi - 0.1, np.pi - 0.1, 0.0, 0.0]), 
-                    np.array([-np.pi/2, -np.pi/2, 0.0, 0.0]),
-                    np.array([-np.pi/2, np.pi/2, 0.0, 0.0]),
-                    np.array([np.pi/2, np.pi/2, 0.0, 0.0])
-                    ]
+    reset_states = [
+        np.array([0.1, 0.1, 0.0, 0.0]),
+        np.array([np.pi - 0.1, np.pi - 0.1, 0.0, 0.0]),
+        np.array([-np.pi / 2, -np.pi / 2, 0.0, 0.0]),
+        np.array([-np.pi / 2, np.pi / 2, 0.0, 0.0]),
+        np.array([np.pi / 2, np.pi / 2, 0.0, 0.0]),
+    ]
 
     returns = np.ones(M) * -np.inf
     prev_returns = np.ones(M) * -np.inf
@@ -149,7 +150,6 @@ def main():
 
     data_buffer.save(args.type + "_single_pen_data.pkl")
     dynamics_lr.save(args.type + "_single_pen_dynamics.pkl")
-    
 
 
 if __name__ == "__main__":

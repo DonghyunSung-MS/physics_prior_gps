@@ -7,13 +7,14 @@ import torch.utils.data as pt_data
 from torch.autograd.functional import jacobian
 
 from gps_physics.algorithms.policy.policy import Policy
-from gps_physics.utils.ptu import CosSin, mlp
+from gps_physics.utils.ptu import ConstScaleLayer, CosSin, mlp
 
 
 class NNPolicy(Policy):
     def __init__(self, hyperparams):
         self.x_dim = hyperparams["x_dim"]
         self.u_dim = hyperparams["u_dim"]
+        max_output = hyperparams["max_torque"]
 
         hyperparams = hyperparams["global_policy"]
         super().__init__(hyperparams)
@@ -25,6 +26,7 @@ class NNPolicy(Policy):
                 nn.Softplus(),
                 nn.Linear(hyperparams["hidden_size"], self.u_dim),
                 nn.Tanh(),
+                ConstScaleLayer(max_output)
                 # nn.Linear(x_dim, u_dim),
             ]
         )
@@ -53,8 +55,8 @@ class NNPolicy(Policy):
 
         return K, k, cov
 
-    def fit(self, state: np.array, action: np.array):
-
+    def fit(self, state: np.array, action: np.array, fname: str):
+    
         pt_state = torch.FloatTensor(state)
 
         self.mean = torch.mean(pt_state, dim=0)
@@ -86,7 +88,7 @@ class NNPolicy(Policy):
                 self.optim.step()
 
         print(f"policy loss : {np.mean(log_loss)}")
-        self.save("globalpolicy.pkl")
+        self.save(fname)
 
     def get_action(self, state):
         pt_state = torch.FloatTensor(state)

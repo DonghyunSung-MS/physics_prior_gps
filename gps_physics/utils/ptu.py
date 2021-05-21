@@ -51,16 +51,52 @@ class CosSin(nn.Module):
 
         cos_ang_q, sin_ang_q = torch.cos(ang_q), torch.sin(ang_q)
         xu_tansform = torch.cat([cos_ang_q, sin_ang_q, other], dim=-1)
-        self.der = torch.cat([-sin_ang_q, cos_ang_q, other], dim=-1)
+
+        if other.shape[1] == 0:
+            self.der = torch.cat([torch.diag_embed(-sin_ang_q), torch.diag_embed(cos_ang_q)], dim=1)
+        else:
+            self.der = torch.cat(
+                [torch.diag_embed(-sin_ang_q), torch.diag_embed(cos_ang_q), torch.diag_embed(torch.ones_like(other))], dim=1
+            )
 
         return xu_tansform
 
 
-if __name__ == "__main__":
-    input = torch.ones(1, 1) * 3.14
-    cossin = CosSin(1, [0])
-    print(cossin(input))
-    print(cossin.der)
+class ConstScaleLayer(nn.Module):
+    def __init__(self, scale):
+        super().__init__()
+        self.scale = scale
 
-    out = torch.zeros(10, 12, 12) @ torch.zeros(12, 2) @ torch.zeros(10, 2, 1)
-    print(out.shape)
+    def forward(self, input):
+        return input * self.scale
+
+
+class InputMatrixLayer(nn.Module):
+    def __init__(self, q_dim, u_dim, input_mat):
+        super().__init__()
+        self.input_mat = nn.Linear(u_dim, q_dim, False)
+        print(self.input_mat.weight.shape)
+
+        self.input_mat.weight = nn.Parameter(torch.FloatTensor(input_mat))
+        self.input_mat.requires_grad_(False)
+        print(self.input_mat.weight.shape)
+
+    def forward(self, input):
+        return self.input_mat(input)
+
+
+if __name__ == "__main__":
+    import numpy as np
+    from torch.autograd.functional import jacobian
+
+    # input = torch.ones(1, 1) * 3.14
+    # cossin = CosSin(1, [0])
+    # print(cossin(input))
+    # print(cossin.der)
+    # out = torch.zeros(10, 12, 12) @ torch.zeros(12, 2) @ torch.zeros(10, 2, 1)
+    # print(out.shape)
+    # input_mat = InputMatrixLayer(2, 1, input_mat=np.array([[0.0], [1.0]]))
+    # print(input_mat(torch.randn(1)))
+
+    print(torch.diag_embed(torch.ones(1, 2)))
+    print(torch.diag(torch.ones(1, 2)))

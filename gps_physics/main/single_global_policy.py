@@ -41,7 +41,7 @@ else:
         env.state = reset_state
         obs = env._get_obs()
 
-        for t in range(2*T):
+        for t in range(2 * T):
             action = global_policy.get_action(obs)
             next_obs, reward, done, _ = env.step(action)
             obs = next_obs
