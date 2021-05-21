@@ -44,7 +44,7 @@ class DynamicsLRLNN(Dynamics):
         self.u_dim = hyperparams["u_dim"]
         self.dt = hyperparams["dt"]
 
-        self.prior = LNNprior(self.x_dim , self.u_dim, self.dt, hyperparams["dyna_prior"])
+        self.prior = LNNprior(self.x_dim, self.u_dim, self.dt, hyperparams["dyna_prior"])
 
     def updata_prior(self, x_xu: List[TrajectoryBuffer]):
         """Construct Data Loader for physic prior

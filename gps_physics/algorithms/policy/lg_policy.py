@@ -13,25 +13,25 @@ class LGPolicy(Policy):
         self.T = hyperparams["T"]
 
         self.init_policy(K, k, cov)
-    
+
     def init_policy(self, K=None, k=None, cov=None):
         if K is None:
-            self.K = 0.01*np.random.randn(self.T, self.u_dim, self.x_dim)
+            self.K = 0.01 * np.random.randn(self.T, self.u_dim, self.x_dim)
         else:
-            assert (K.shape[0] == self.T and K.shape[1] == self.u_dim and K.shape[2] == self.x_dim)
+            assert K.shape[0] == self.T and K.shape[1] == self.u_dim and K.shape[2] == self.x_dim
             self.K = K
 
         if k is None:
-            self.k =  0.01*np.random.randn(self.T, self.u_dim)
+            self.k = 0.01 * np.random.randn(self.T, self.u_dim)
         else:
-            assert (k.shape[0] == self.T and k.shape[1] == self.u_dim)
+            assert k.shape[0] == self.T and k.shape[1] == self.u_dim
             self.k = k
 
         if cov is None:
-            self.cov =  np.stack([np.eye(self.u_dim) for _ in range(self.T)])
+            self.cov = np.stack([np.eye(self.u_dim) for _ in range(self.T)])
         else:
-            assert (cov.shape[0] == self.T and cov.shape[1] == self.u_dim and cov.shape[2] == self.u_dim)
-            self.cov = cov            
+            assert cov.shape[0] == self.T and cov.shape[1] == self.u_dim and cov.shape[2] == self.u_dim
+            self.cov = cov
 
     def backward(self, mean_traj, dynamics, cost, **kwargs):
         gl_policy = kwargs.get("gl_policy")

@@ -1,5 +1,7 @@
-from ast import parse
+import argparse
 import os
+from ast import parse
+
 import numpy as np
 import toml
 import torch
@@ -11,14 +13,12 @@ from gps_physics.algorithms.policy.lg_policy import LGPolicy
 from gps_physics.algorithms.policy.mpc_policy import MPCPolicy
 from gps_physics.algorithms.policy.NN_policy import NNPolicy
 from gps_physics.gym_env.single_pendulm import SinglePendulmEnv
-from gps_physics.utils.samples import TrajectoryBuffer, SuperviseBuffer
+from gps_physics.utils.samples import SuperviseBuffer, TrajectoryBuffer
 from gps_physics.utils.traj_utils import *
-import argparse
 
-
-parser = argparse.ArgumentParser(description='Physics Prior Policy Search')
-parser.add_argument('--path', type=str, help='path to config file')
-parser.add_argument('--type', type=str, help='Constrained LQR(CLQR) or LQR')
+parser = argparse.ArgumentParser(description="Physics Prior Policy Search")
+parser.add_argument("--path", type=str, help="path to config file")
+parser.add_argument("--type", type=str, help="Constrained LQR(CLQR) or LQR")
 args = parser.parse_args()
 
 with open(args.path) as conffile:
@@ -30,6 +30,7 @@ np.set_printoptions(precision=4)
 
 print(f"{args.type} Guide policy search")
 
+
 def main():
     MAX_ITER = CONFIG["max_iter"]
 
@@ -37,7 +38,7 @@ def main():
     N = CONFIG["N"]  # num traj per initial condition
     T = CONFIG["T"]  # horizon
 
-    #env
+    # env
     x_dim = CONFIG["x_dim"]
     u_dim = CONFIG["u_dim"]
     max_torque = CONFIG["max_torque"]
@@ -49,13 +50,11 @@ def main():
     mpc_policies = [MPCPolicy(CONFIG, u_min=-max_torque, u_max=max_torque) for _ in range(M)]
     lg_policies = [LGPolicy(CONFIG) for _ in range(M)]
 
-    data_buffer = SuperviseBuffer(int(1e+5))
+    data_buffer = SuperviseBuffer(int(1e5))
 
     env.reset()
-    reset_states = [np.array([0.1, 0.0]), 
-                    np.array([np.pi / 2.0 + 0.1, 0.0]), 
-                    np.array([-np.pi / 2.0, 0.0])]
-    
+    reset_states = [np.array([0.1, 0.0]), np.array([np.pi / 2.0 + 0.1, 0.0]), np.array([-np.pi / 2.0, 0.0])]
+
     returns = np.ones(M) * -np.inf
     prev_returns = np.ones(M) * -np.inf
     learning = True
@@ -72,10 +71,10 @@ def main():
             mean_traj = exp_buffer[i - 1].mean_traj
         for m in range(M):
             avg_returns = 0.0
-            AB, c= None, None
+            AB, c = None, None
 
             if args.type == "CLQR":
-                if i!=0:
+                if i != 0:
                     AB, c, W = dynamics_lr.fit(mean_traj[m])
                     mpc_policies[m].forward(mean_traj[m], reset_states[m], AB, c, sing_pen_cost)
 
@@ -87,10 +86,11 @@ def main():
                     action = None
 
                     if args.type == "LQR":
-                        action = lg_policies[m].get_action(t, obs, mean_traj[m][t][x_dim : x_dim * 2], mean_traj[m][t][-u_dim:])
-                    elif args.type == "CLQR":
-                        action = mpc_policies[m].get_action(t, mean_traj[m], obs, AB, c, sing_pen_cost
+                        action = lg_policies[m].get_action(
+                            t, obs, mean_traj[m][t][x_dim : x_dim * 2], mean_traj[m][t][-u_dim:]
                         )
+                    elif args.type == "CLQR":
+                        action = mpc_policies[m].get_action(t, mean_traj[m], obs, AB, c, sing_pen_cost)
 
                     next_obs, reward, done, _ = env.step(action)
 
@@ -106,7 +106,7 @@ def main():
                     obs = next_obs
 
             returns[m] = avg_returns / N
-        
+
         delta = np.max(np.abs(prev_returns - returns))
         print(delta, returns, prev_returns)
         if delta > 0.5:
@@ -121,7 +121,8 @@ def main():
                     mean_traj_at_m = None
                     joint_cov_at_m = None
                     mean_traj_at_m, joint_cov_at_m, l = lg_policies[m].fit(
-                                                                    reset_states[m], dynamics_lr, mean_traj[m], sing_pen_cost)
+                        reset_states[m], dynamics_lr, mean_traj[m], sing_pen_cost
+                    )
 
                     print(f"update {m} init condition")
                     exp_buffer[i].mean_traj[m] = mean_traj_at_m
@@ -140,8 +141,9 @@ def main():
             learning = False
 
         prev_returns = returns.copy()
-    
+
     data_buffer.save(args.type + "single_pen.pkl")
+
 
 if __name__ == "__main__":
     main()

@@ -53,14 +53,13 @@ if __name__ == "__main__":
     # set initial policy
     for m in range(M):
         lg = LGPolicy(config)
-        lg.K = 0.01*np.random.randn(T, u_dim, x_dim)
-        lg.k = 0.01*np.random.randn(T, u_dim)
+        lg.K = 0.01 * np.random.randn(T, u_dim, x_dim)
+        lg.k = 0.01 * np.random.randn(T, u_dim)
         lg.cov = np.stack([np.eye(u_dim) for _ in range(T)])
         lg_policy_list.append(lg)
 
     # sing_pen_augcost = SinglePendulmAugCost(1.0, 0.1, 0.001)
     sing_pen_cost = SinglePendulmCost(1.0, 0.1, 0.001)
-
 
     env.reset()
 
@@ -84,8 +83,10 @@ if __name__ == "__main__":
                 for t in range(T):
                     action = None
                     # if i==0:
-                    action = lg_policy_list[m].get_action(t, obs, mean_traj[m][t][x_dim : x_dim * 2], mean_traj[m][t][-u_dim:], max_torque)
-                    if action[0]>=2.0 or action[0]<=-2.0:
+                    action = lg_policy_list[m].get_action(
+                        t, obs, mean_traj[m][t][x_dim : x_dim * 2], mean_traj[m][t][-u_dim:], max_torque
+                    )
+                    if action[0] >= 2.0 or action[0] <= -2.0:
                         print(f"init {m}, time {t}, act: {action[0]:0.1f}")
                     next_obs, reward, done, _ = env.step(action[0])
                     iter_traj.push_transition(m, n, t, obs, action, next_obs)
@@ -121,7 +122,8 @@ if __name__ == "__main__":
             mean_traj_at_m = None
             joint_cov_at_m = None
             mean_traj_at_m, joint_cov_at_m, l = lg_policy_list[m].fit(
-                                                            reset_states[m], dynamics_lr, mean_traj[m], sing_pen_cost)
+                reset_states[m], dynamics_lr, mean_traj[m], sing_pen_cost
+            )
             # gps iteration
             # for _ in range(lg_step):
             #     mean_traj_at_m, joint_cov_at_m, l = lg_policy_list[m].fit(

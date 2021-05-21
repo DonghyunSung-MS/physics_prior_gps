@@ -1,5 +1,4 @@
 import os
-from cvxpy.settings import NONNEG
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -7,14 +6,14 @@ import numpy as np
 import toml
 import torch
 import torchdyn
+from cvxpy.settings import NONNEG
 
 import gps_physics
 from gps_physics.algorithms.cost.cost import SinglePendulmAugCost, SinglePendulmCost
 from gps_physics.algorithms.dynamics.lnn_dynamics import DynamicsLRLNN
 from gps_physics.algorithms.policy.lg_policy import LGPolicy
-from gps_physics.algorithms.policy.NN_policy import NNPolicy
 from gps_physics.algorithms.policy.mpc_policy import MPCPolicy
-
+from gps_physics.algorithms.policy.NN_policy import NNPolicy
 from gps_physics.gym_env.single_pendulm import SinglePendulmEnv
 from gps_physics.utils.samples import TrajectoryBuffer
 from gps_physics.utils.traj_utils import *
@@ -52,10 +51,9 @@ if __name__ == "__main__":
     mpc_policies = [MPCPolicy(x_dim, u_dim, dt, config, u_min=-max_torque, u_max=max_torque) for _ in range(M)]
     sing_pen_cost = SinglePendulmCost(1.0, 0.1, 0.001)
 
-
     env.reset()
 
-    reset_states = [np.array([0.1, 0.0]), np.array([np.pi-0.1, 0.0]), np.array([np.pi / 2.0, 0.0])]
+    reset_states = [np.array([0.1, 0.0]), np.array([np.pi - 0.1, 0.0]), np.array([np.pi / 2.0, 0.0])]
 
     exp_buffer = []
 
@@ -67,8 +65,8 @@ if __name__ == "__main__":
         else:
             mean_traj = exp_buffer[i - 1].mean_traj
         for m in range(M):
-            AB, c= None, None
-            if i!=0:
+            AB, c = None, None
+            if i != 0:
                 AB, c, W = dynamics_lr.fit(mean_traj[m])
                 mpc_policies[m].forward(mean_traj[m], reset_states[m], AB, c, sing_pen_cost)
 
@@ -98,5 +96,3 @@ if __name__ == "__main__":
             AB, c, W = dynamics_lr.fit(mean_traj[m])
             new_traj, new_est_cost, _ = mpc_policies[m].forward(mean_traj[m], reset_states[m], AB, c, sing_pen_cost)
             exp_buffer[i].mean_traj[m] = new_traj
-
-

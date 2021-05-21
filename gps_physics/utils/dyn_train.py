@@ -1,7 +1,8 @@
+import numpy as np
 import torch
 import torchdyn
 import wandb
-import numpy as np
+
 
 class LNNLearner:
     def __init__(self, model: torchdyn.models.NeuralDE, dt, x_dim, lr=0.001):

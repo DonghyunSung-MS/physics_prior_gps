@@ -1,3 +1,4 @@
+import warnings
 from os import path
 
 import gym
@@ -5,7 +6,7 @@ import numpy as np
 from gym import spaces
 from gym.utils import seeding
 from scipy.integrate import odeint, solve_ivp
-import warnings
+
 
 def angle_normalize(x):
     return ((x + np.pi) % (2 * np.pi)) - np.pi
@@ -54,9 +55,9 @@ class SinglePendulmEnv(gym.Env):
         return self.state
 
     def step(self, u):
-        if isinstance(u, np.ndarray) and u.shape[0]==1:
+        if isinstance(u, np.ndarray) and u.shape[0] == 1:
             u = u[0]
-        if u > self.max_torque + 0.1 or u < - self.max_torque - 0.1:
+        if u > self.max_torque + 0.1 or u < -self.max_torque - 0.1:
             warnings.warn(f"action {u:0.3f} beyond limit")
 
         th, thdot = self.state  # th := theta

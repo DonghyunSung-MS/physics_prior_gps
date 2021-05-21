@@ -30,11 +30,11 @@ def kl_trajectory(mean_traj, lg_policy, gl_policy):
             - np.log(np.linalg.det(loc_cov))
         )
 
-    return kl*0.5
+    return kl * 0.5
 
 
 def eta_adjust(kl_traj, cur_eta, min_eta, max_eta, epsilon):
-    
+
     new_eta = np.clip(cur_eta + 0.01 * (kl_traj - epsilon), min_eta, max_eta)
-    
+
     return new_eta
