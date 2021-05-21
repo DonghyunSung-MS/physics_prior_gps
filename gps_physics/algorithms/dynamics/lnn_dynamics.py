@@ -13,7 +13,7 @@ from gps_physics.model.lagdyn import ControlledLNN, DeepLagrangianNetwork, NonCo
 from gps_physics.utils.dyn_train import LNNLearner
 from gps_physics.utils.ptu import *
 from gps_physics.utils.samples import TrajectoryBuffer
-
+import pickle
 
 class LNNprior:
     def __init__(self, x_dim, u_dim, dt, hyperparams):
@@ -22,7 +22,8 @@ class LNNprior:
         self.x_dim = x_dim
         self.u_dim = u_dim
 
-        lnn = DeepLagrangianNetwork(x_dim // 2, hyperparams["hidden_size"], angular_dims=hyperparams["angular_dims"])
+        lnn = DeepLagrangianNetwork(x_dim // 2, hyperparams["hidden_size"], angular_dims=hyperparams["angular_dims"], 
+                                    input_matrix=InputMatrixLayer(x_dim // 2, u_dim, np.array(hyperparams["input_mat"])))
 
         self.model = NeuralDE(func=lnn, solver="dopri8")  # torch.nn.Module
         self.learner = LNNLearner(self.model, self.dt, self.x_dim, hyperparams["lr"])  # pl moudle
@@ -117,10 +118,21 @@ class DynamicsLRLNN(Dynamics):
                 - mean_traj[t][: self.x_dim]
                 + mean_traj[t][self.x_dim : 2 * self.x_dim]
             )
-            c_t[: self.x_dim] += mean_traj[t][self.x_dim + q : self.x_dim + 2 * q] * self.dt
+            c_t[: q] += mean_traj[t][self.x_dim + q : self.x_dim + 2 * q] * self.dt
 
             self.AB[t] = AB_t
             self.c[t] = c_t
             self.W[t] = 0.1 * np.eye(self.x_dim)  # TODO better noise reprenstation
 
         return self.AB, self.c, self.W
+
+    def save(self, name):
+        f = open(name, "wb")
+        pickle.dump(self.__dict__, f)
+        f.close()
+
+    def load(self, name):
+        f = open(name, "rb")
+        tmp_dict = pickle.load(f)
+        f.close()
+        self.__dict__.update(tmp_dict)
